@@ -4,13 +4,12 @@ import flash.geom.Rectangle;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.FlxState;
+import flixel.addons.ui.FlxUIInputText;
 import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxAngle;
 import flixel.math.FlxMath;
 import flixel.math.FlxPoint;
 import flixel.math.FlxRect;
 import flixel.math.FlxVector;
-import flixel.util.FlxColor;
 import flixel.util.FlxSpriteUtil;
 
 //TODO
@@ -21,6 +20,11 @@ import flixel.util.FlxSpriteUtil;
 //Rectangle furniture
 //Circle furniture
 
+//pixels per inch
+//236 inches - 19 feet 8 inches
+//477 pixels
+//2.021 pixels per inch
+
 class PlayState extends FlxState
 {
 	public var calibrating:Bool = true;
@@ -30,6 +34,10 @@ class PlayState extends FlxState
 	
 	private var drawingBuffer:FlxSprite;
 	private var objects:FlxTypedGroup<FlxSprite>;
+	public var textfield:FlxUIInputText;
+	
+	private var calibrationDistance:Float = 0.0;
+	private var pixelsPerInch:Float = 2.043;
 	
 	override public function create():Void
 	{
@@ -43,6 +51,15 @@ class PlayState extends FlxState
 		drawingBuffer = new FlxSprite(0, 0);
 		drawingBuffer.makeGraphic(FlxG.width, FlxG.height, 0x0);
 		add(drawingBuffer);
+		
+		textfield = new FlxUIInputText();
+		textfield.x = 50;
+		textfield.y = 50;
+		textfield.borderColor = 0xFFFFFFFF;
+		textfield.text = "Some Text";
+		textfield.size = 16;
+		textfield.visible = false;
+		add(textfield);
 	}
 
 	override public function update(elapsed:Float):Void
@@ -51,13 +68,21 @@ class PlayState extends FlxState
 		
 		if (FlxG.mouse.justPressed){
 			clickStart = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
-			dragging = true;
+			if (!FlxG.keys.pressed.SHIFT){
+				dragging = true;
+			}
 		}
 		
 		if (FlxG.mouse.justReleased){
 			dragging = false;
 			
 			var pooledEndPoint = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
+			
+			var distance = Math.sqrt((pooledEndPoint.x - clickStart.x) * (pooledEndPoint.x - clickStart.x) + (pooledEndPoint.y - clickStart.y) * (pooledEndPoint.y - clickStart.y));
+			FlxG.log.add("Pixels: " + distance);
+			
+			calibrationDistance = distance;
+			
 			var extents:FlxRect = FlxRect.get(
 				Math.min(clickStart.x, pooledEndPoint.x)-15, 
 				Math.min(clickStart.y, pooledEndPoint.y)-15,
@@ -70,6 +95,16 @@ class PlayState extends FlxState
 			drawBeam(newBeam, clickStart.subtract(extents.x, extents.y), pooledEndPoint.subtract(extents.x, extents.y), 4);
 			objects.add(newBeam);
 			
+			//textfield.text = "";
+			//textfield.visible = true;
+			
+			
+			//Using the calibration, report the length of the line
+			var totalInches:Float = distance / pixelsPerInch;
+			var feet:Int = Math.floor(totalInches / 12);
+			var inches:Float = FlxMath.roundDecimal(totalInches % 12, 1);
+			FlxG.log.add("Distance: " + feet + "' " + inches + "\"");
+			
 			pooledEndPoint.put();
 			clickStart.put();
 		}
@@ -80,6 +115,16 @@ class PlayState extends FlxState
 		
 		if (FlxG.mouse.wheel < 0){
 			FlxG.camera.zoom *= .95;
+		}
+		
+		if (FlxG.keys.justPressed.ENTER){
+			FlxG.log.add(textfield.text);
+		}
+		
+		if (FlxG.mouse.pressed && !dragging){
+			//TODO: Math this.
+			FlxG.camera.scroll.x = FlxG.mouse.x - clickStart.x;
+			FlxG.camera.scroll.y = FlxG.mouse.y - clickStart.y;
 		}
 	}
 	
