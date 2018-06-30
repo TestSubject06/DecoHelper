@@ -11,9 +11,10 @@ import flixel.math.FlxPoint;
 import flixel.math.FlxRect;
 import flixel.math.FlxVector;
 import flixel.util.FlxSpriteUtil;
+import flixel.FlxObject;
 
 //TODO
-//Calibration of pixels -> distance
+//Calibration of pixels -> distance		DONE
 //Select and move drawn items
 //Toolbar panel
 //Panning the image with right click
@@ -31,17 +32,34 @@ class PlayState extends FlxState
 	
 	public var dragging:Bool = false;
 	public var clickStart:FlxPoint = null;
+	public var offsetStart:FlxPoint = null;
 	
 	private var drawingBuffer:FlxSprite;
 	private var objects:FlxTypedGroup<FlxSprite>;
 	public var textfield:FlxUIInputText;
 	
 	private var calibrationDistance:Float = 0.0;
-	private var pixelsPerInch:Float = 2.043;
+	private var pixelsPerInch:Float = 2.030;
+	
+	private var hitTester:FlxSprite;
+	private var closestObject:FlxSprite;
+	private var selectedObject:FlxSprite;
+	
+	private var tools:FlxTypedGroup<FlxSprite>;
+	private var toolbarSelect:FlxSprite;
+	private var toolbarMeasure:FlxSprite;
+	private var toolbarPan:FlxSprite;
+	private var toolbarRectangle:FlxSprite;
+	private var toolbarCircle:FlxSprite;
+	
+	private var selectedTool:String = "Select";
+	private var lastTool:String = "";
 	
 	override public function create():Void
 	{
 		super.create();
+		
+		FlxG.camera.antialiasing = true;
 		
 		add(new FlxSprite(0, 0, AssetPaths.floorplan__png));
 		
@@ -60,20 +78,38 @@ class PlayState extends FlxState
 		textfield.size = 16;
 		textfield.visible = false;
 		add(textfield);
+		
+		hitTester = new FlxSprite(0, 0);
+		hitTester.makeGraphic(4, 4, 0xFF000000);
+		hitTester.offset.set(2, 2);
+		add(hitTester);
+		
+		buildToolbar();
 	}
 
 	override public function update(elapsed:Float):Void
 	{
 		super.update(elapsed);
 		
+		if (FlxG.keys.justPressed.SPACE){
+			lastTool = selectedTool;
+			selectedTool = "Pan";
+		}
+		if (FlxG.keys.justReleased.SPACE){
+			selectedTool = lastTool;
+		}
+		
 		if (FlxG.mouse.justPressed){
-			clickStart = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
-			if (!FlxG.keys.pressed.SHIFT){
+			if (!FlxG.keys.pressed.SPACE){
+				clickStart = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
 				dragging = true;
+			}else{
+				clickStart = FlxPoint.get(FlxG.mouse.screenX, FlxG.mouse.screenY);
+				offsetStart = FlxPoint.get(FlxG.camera.scroll.x, FlxG.camera.scroll.y);
 			}
 		}
 		
-		if (FlxG.mouse.justReleased){
+		if (FlxG.mouse.justReleased && dragging){
 			dragging = false;
 			
 			var pooledEndPoint = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
@@ -107,6 +143,9 @@ class PlayState extends FlxState
 			
 			pooledEndPoint.put();
 			clickStart.put();
+		}else if (FlxG.mouse.justReleased && !dragging){
+			clickStart.put();
+			offsetStart.put();
 		}
 		
 		if (FlxG.mouse.wheel > 0){
@@ -122,10 +161,22 @@ class PlayState extends FlxState
 		}
 		
 		if (FlxG.mouse.pressed && !dragging){
-			//TODO: Math this.
-			FlxG.camera.scroll.x = FlxG.mouse.x - clickStart.x;
-			FlxG.camera.scroll.y = FlxG.mouse.y - clickStart.y;
+			FlxG.camera.scroll.x = offsetStart.x + (clickStart.x - FlxG.mouse.screenX);
+			FlxG.camera.scroll.y = offsetStart.y + (clickStart.y - FlxG.mouse.screenY);
 		}
+		
+		hitTester.x = FlxG.mouse.x;
+		hitTester.y = FlxG.mouse.y;
+		
+		objects.forEach(function(object:FlxSprite){ object.color = 0xFFFFFFFF; });
+		closestObject = null;
+		FlxG.overlap(hitTester, objects, overlapTest);
+		if (closestObject != null){
+			closestObject.color = 0xFFFF0000;
+		}
+		
+		tools.forEach(function(tool){tool.color = 0xFFFFFFFF; });
+		getToolSprite(selectedTool).color = 0xFF00FF00;
 	}
 	
 	override public function draw():Void 
@@ -155,5 +206,68 @@ class PlayState extends FlxState
 		
 		FlxSpriteUtil.drawLine(target, endPoint.x, endPoint.y, endPoint.x + leftNormal.x, endPoint.y + leftNormal.y, {thickness:thickness/2, color:0xFF000000});
 		FlxSpriteUtil.drawLine(target, endPoint.x, endPoint.y, endPoint.x - leftNormal.x, endPoint.y - leftNormal.y, {thickness:thickness/2, color:0xFF000000});
+	}
+	
+	private function overlapTest(mouseTester:FlxObject, lineObject:FlxObject):Void{
+		var _mouseTester:FlxSprite = cast(mouseTester, FlxSprite);
+		var _lineObject:FlxSprite = cast(lineObject, FlxSprite);
+		
+		if (closestObject == null){
+			closestObject = _lineObject;
+			return;
+		}
+		
+		if (FlxMath.distanceBetween(_mouseTester, _lineObject) < FlxMath.distanceBetween(_mouseTester, closestObject)){
+			closestObject = _lineObject;
+		}
+	}
+	
+	private function buildToolbar(){
+		FlxG.cameras.add(new flixel.FlxCamera(0, 0, 60, 260, 1));
+		flixel.FlxCamera.defaultCameras = [FlxG.camera];
+		
+		tools = new FlxTypedGroup();
+		
+		toolbarSelect = new FlxSprite(5, 5, AssetPaths.SelectMove__png);
+		toolbarSelect.cameras = [FlxG.cameras.list[1]];
+		tools.add(toolbarSelect);
+		
+		toolbarMeasure = new FlxSprite(5, 55, AssetPaths.Measure__png);
+		toolbarMeasure.cameras = [FlxG.cameras.list[1]];
+		tools.add(toolbarMeasure);
+		
+		toolbarPan = new FlxSprite(5, 105, AssetPaths.Pan__png);
+		toolbarPan.cameras = [FlxG.cameras.list[1]];
+		tools.add(toolbarPan);
+		
+		toolbarRectangle = new FlxSprite(5, 155, AssetPaths.Rectangle__png);
+		toolbarRectangle.cameras = [FlxG.cameras.list[1]];
+		tools.add(toolbarRectangle);
+		
+		toolbarCircle = new FlxSprite(5, 205, AssetPaths.Circle__png);
+		toolbarCircle.cameras = [FlxG.cameras.list[1]];
+		tools.add(toolbarCircle);
+		
+		add(tools);
+	}
+	
+	function getToolSprite(tool:String):FlxSprite{
+		switch(tool){
+			case "Select":
+				return toolbarSelect;
+			
+			case "Pan":
+				return toolbarPan;
+				
+			case "Rectangle":
+				return toolbarRectangle;
+				
+			case "Circle":
+				return toolbarCircle;
+				
+			case "Measure":
+				return toolbarMeasure;
+		}
+		return null;
 	}
 }
