@@ -18,12 +18,13 @@ import flixel.FlxObject;
 //Select and move drawn items			DONE
 //Toolbar panel							DONE
 //Panning the image with right click	DONE
-//Rectangle furniture					
+//Rectangle furniture					DONE
 //Circle furniture						
-//Delete objects
-//Show length/dimensions while drawing
-//Brute force statistics
-//
+//Delete objects						DONE
+//Show length/dimensions while drawing	
+//Brute force statistics				
+//Save/load arrangements
+//Edit existing objects
 
 //pixels per inch
 //236 inches - 19 feet 8 inches
@@ -197,7 +198,7 @@ class PlayState extends FlxState
 			clickStart = FlxPoint.get(FlxG.mouse.screenX, FlxG.mouse.screenY);
 			offsetStart = FlxPoint.get(FlxG.camera.scroll.x, FlxG.camera.scroll.y);
 		}
-		if (activeTool == "Measure" || activeTool == "Rectangle"){
+		if (activeTool == "Measure" || activeTool == "Rectangle" || activeTool == "Circle"){
 			clickStart = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
 			dragging = true;
 		}
@@ -277,6 +278,32 @@ class PlayState extends FlxState
 			PSP.put();
 		}
 		
+		if (activeTool == "Circle"){
+			dragging = false;
+			var pooledEndPoint = FlxPoint.get(FlxG.mouse.x, FlxG.mouse.y);
+			
+			var radius = Math.sqrt((pooledEndPoint.x - clickStart.x) * (pooledEndPoint.x - clickStart.x) + (pooledEndPoint.y - clickStart.y) * (pooledEndPoint.y - clickStart.y));
+			radius = Math.max(radius, 1);
+			
+			var extents:FlxRect = FlxRect.get(
+				clickStart.x - radius - 2, 
+				clickStart.y - radius - 2,
+				radius*2 + 4,
+				radius*2 + 4
+			);
+			
+			var PSP:FlxPoint = FlxPoint.get(radius+2, radius+2);
+			
+			var newCircle:FlxSprite = new FlxSprite(extents.x, extents.y);
+			newCircle.makeGraphic(Math.ceil(extents.width), Math.ceil(extents.height), 0x0, true);
+			drawCircle(newCircle, PSP, radius, 4);
+			objects.add(newCircle);
+				
+			pooledEndPoint.put();
+			clickStart.put();
+			PSP.put();
+		}
+		
 		if (activeTool == "Pan"){
 			clickStart.put();
 			offsetStart.put();			
@@ -321,6 +348,10 @@ class PlayState extends FlxState
 				drawRectangle(drawingBuffer, bufferPoint, pooledEndPoint.set(Math.max(clickStart.x, pooledEndPoint.x), Math.max(clickStart.y, pooledEndPoint.y)), 4);
 				bufferPoint.put();
 			}
+			if (activeTool == "Circle"){
+				var radius = Math.sqrt((pooledEndPoint.x - clickStart.x) * (pooledEndPoint.x - clickStart.x) + (pooledEndPoint.y - clickStart.y) * (pooledEndPoint.y - clickStart.y));
+				drawCircle(drawingBuffer, clickStart, Math.max(radius, 1), 4);
+			}
 			pooledEndPoint.put();
 		}
 		super.draw();
@@ -332,6 +363,14 @@ class PlayState extends FlxState
 		
 		FlxSpriteUtil.drawLine(target, startPoint.x, startPoint.y, endPoint.x, endPoint.y, {thickness:thickness/2, color:0xFFFFFFFF});
 		FlxSpriteUtil.drawLine(target, endPoint.x, startPoint.y, startPoint.x, endPoint.y, {thickness:thickness/2, color:0xFFFFFFFF});
+	}
+	
+	function drawCircle(target:FlxSprite, startPoint:FlxPoint, radius:Float, thickness:Int):Void{
+		FlxSpriteUtil.drawCircle(target, startPoint.x, startPoint.y, radius, 0xFF000000, {thickness:thickness, color:0xFFFFFFFF});
+		FlxSpriteUtil.drawCircle(target, startPoint.x, startPoint.y, radius, 0x0, {thickness:thickness / 2, color:0xFF000000});
+		
+		FlxSpriteUtil.drawLine(target, startPoint.x-radius, startPoint.y, startPoint.x + radius, startPoint.y, {thickness:thickness/2, color:0xFFFFFFFF});
+		FlxSpriteUtil.drawLine(target, startPoint.x, startPoint.y - radius, startPoint.x, startPoint.y + radius, {thickness:thickness/2, color:0xFFFFFFFF});
 	}
 	
 	function drawBeam(target:FlxSprite, startPoint:FlxPoint, endPoint:FlxPoint, thickness:Int){
